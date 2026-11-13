@@ -152,7 +152,8 @@ jobs:
 
   macos:
     name: macOS (Universal)
-    runs-on: macos-14
+    # Apple Silicon runner; builds the Intel part by cross-compiling.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
