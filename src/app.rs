@@ -101,7 +101,7 @@ pub struct App {
 const DEFAULT_TEMPLATE: &str = "// Eigene Vorlage\nLittleEndian();\n\ntypedef struct {\n    char  magic[4];\n    uint  version;\n    uint  count;\n} HEADER;\n\nHEADER header;\n";
 
 impl App {
-    pub fn new(files: Vec<PathBuf>, screenshot: Option<PathBuf>) -> Self {
+    pub fn new(files: Vec<PathBuf>, screenshot: Option<PathBuf>, scene: Option<String>) -> Self {
         let mut app = App {
             docs: Vec::new(),
             active: 0,
@@ -182,6 +182,9 @@ impl App {
             app.auto_run_template(0);
             app.docs[0].set_cursor(0x12, false);
             app.log("Beispieldatei 'beispiel.bmp' geöffnet – mit Datei › Öffnen eigene Dateien laden.");
+        }
+        if let Some(s) = scene {
+            crate::scenes::apply(&mut app, &s);
         }
         app
     }

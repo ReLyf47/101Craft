@@ -1,0 +1,231 @@
+# Builds 101Craft for every platform and publishes a GitHub release.
+#
+# Start a release by pushing a version tag, e.g.:
+#   git tag v0.1.0
+#   git push origin v0.1.0
+# or run it by hand under "Actions" > "Release" > "Run workflow"
+# (a manual run without a tag only uploads the files as build artifacts).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN: 101Craft
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            inno_arch: x64compatible
+          - arch: arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            inno_arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Version
+        id: ver
+        shell: bash
+        run: echo "version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+
+      - name: Portable ZIP
+        shell: pwsh
+        run: |
+          $name = "101Craft-${{ steps.ver.outputs.version }}-windows-${{ matrix.arch }}-portable"
+          New-Item -ItemType Directory -Force dist/$name | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ env.BIN }}.exe" dist/$name/
+          Copy-Item README.md dist/$name/
+          New-Item -ItemType Directory -Force dist/$name/Vorlagen | Out-Null
+          Copy-Item templates/*.tpl dist/$name/Vorlagen/
+          Compress-Archive -Path dist/$name/* -DestinationPath "dist/$name.zip"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc `
+            "/DAppVersion=${{ steps.ver.outputs.version }}" `
+            "/DArch=${{ matrix.inno_arch }}" `
+            "/DSourceExe=..\target\${{ matrix.target }}\release\${{ env.BIN }}.exe" `
+            "/DOutName=101Craft-${{ steps.ver.outputs.version }}-windows-${{ matrix.arch }}-setup" `
+            "/O..\dist" `
+            installer\101craft.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: |
+            dist/*.zip
+            dist/*.exe
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - arch: arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev libwayland-dev libssl-dev libgtk-3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          NAME="101Craft-${VERSION}-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$NAME/Vorlagen"
+          cp "target/${{ matrix.target }}/release/$BIN" "dist/$NAME/"
+          cp README.md "dist/$NAME/"
+          cp templates/*.tpl "dist/$NAME/Vorlagen/"
+          cat > "dist/$NAME/101craft.desktop" <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=101Craft
+          Comment=Hex- und Binär-Editor
+          Exec=101Craft %F
+          Terminal=false
+          Categories=Development;Utility;
+          EOF
+          tar -C dist -czf "dist/$NAME.tar.gz" "$NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: dist/*.tar.gz
+
+  macos:
+    name: macOS (Universal)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (Apple Silicon + Intel)
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: App bundle
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          APP="dist/101Craft.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Vorlagen"
+          lipo -create \
+            "target/aarch64-apple-darwin/release/$BIN" \
+            "target/x86_64-apple-darwin/release/$BIN" \
+            -output "$APP/Contents/MacOS/$BIN"
+          cp templates/*.tpl "$APP/Contents/Resources/Vorlagen/"
+          cat > "$APP/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>101Craft</string>
+            <key>CFBundleDisplayName</key><string>101Craft</string>
+            <key>CFBundleIdentifier</key><string>io.github.johmarjac.101craft</string>
+            <key>CFBundleExecutable</key><string>101Craft</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          # Ad-hoc signature so Apple Silicon starts it (not notarised).
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" "dist/101Craft-${VERSION}-macos-universal.zip"
+          hdiutil create -volname 101Craft -srcfolder "$APP" -ov -format UDZO \
+            "dist/101Craft-${VERSION}-macos-universal.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: |
+            dist/*.zip
+            dist/*.dmg
+
+  release:
+    name: Publish release
+    needs: [windows, linux, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: 101Craft ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*

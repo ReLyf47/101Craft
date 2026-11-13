@@ -35,7 +35,7 @@ impl Palette {
                 header_fg: Color32::from_rgb(150, 170, 200),
                 addr_fg: Color32::from_rgb(110, 160, 220),
                 byte_fg: Color32::from_rgb(220, 222, 228),
-                zero_fg: Color32::from_rgb(110, 114, 124),
+                zero_fg: Color32::from_rgb(128, 134, 148),
                 sel_bg: Color32::from_rgb(38, 110, 200),
                 sel_fg: Color32::WHITE,
                 cursor: Color32::from_rgb(255, 160, 40),
@@ -70,9 +70,9 @@ impl Palette {
     pub fn tint(&self, c: Color32) -> Color32 {
         if self.dark {
             Color32::from_rgb(
-                (c.r() as u16 * 45 / 100 + 15) as u8,
-                (c.g() as u16 * 45 / 100 + 15) as u8,
-                (c.b() as u16 * 45 / 100 + 20) as u8,
+                (c.r() as u16 * 28 / 100 + 14) as u8,
+                (c.g() as u16 * 28 / 100 + 14) as u8,
+                (c.b() as u16 * 28 / 100 + 18) as u8,
             )
         } else {
             c

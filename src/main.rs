@@ -9,6 +9,7 @@ mod doc;
 mod hexview;
 mod panels;
 mod sample;
+mod scenes;
 mod template;
 mod tools;
 mod tparse;
@@ -42,11 +43,19 @@ fn icon() -> egui::IconData {
 
 fn main() -> eframe::Result {
     let mut screenshot: Option<PathBuf> = None;
+    let mut scene: Option<String> = None;
     let mut files = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         if a == "--screenshot" {
             screenshot = args.next().map(PathBuf::from);
+        } else if a == "--scene" {
+            scene = args.next();
+            if let Some(s) = &scene {
+                if !scenes::SCENES.contains(&s.as_str()) {
+                    eprintln!("Unbekannte Szene '{s}'. Möglich: {}", scenes::SCENES.join(", "));
+                }
+            }
         } else if let Some(v) = a.strip_prefix("--screenshot=") {
             screenshot = Some(PathBuf::from(v));
         } else {
@@ -84,6 +93,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "101Craft",
         options,
-        Box::new(move |_cc| Ok(Box::new(app::App::new(files, screenshot)))),
+        Box::new(move |_cc| Ok(Box::new(app::App::new(files, screenshot, scene)))),
     )
 }

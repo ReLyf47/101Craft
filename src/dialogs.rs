@@ -313,6 +313,7 @@ impl App {
         egui::Window::new("Vorlagen-Editor")
             .open(&mut open)
             .default_size([560.0, 460.0])
+            .default_pos([380.0, 110.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Name:");

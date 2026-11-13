@@ -225,7 +225,7 @@ fn bookmarks(app: &mut App, ui: &mut Ui) {
                     let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                     let c = crate::hexview::Palette::new(pal_dark).tint(b.color);
                     ui.painter().rect_filled(r, CornerRadius::same(2), c);
-                    ui.add(egui::TextEdit::singleline(&mut b.name).desired_width(100.0));
+                    ui.add_sized([120.0, 18.0], egui::TextEdit::singleline(&mut b.name));
                 });
                 if ui.link(RichText::new(format!("0x{:X}", b.start)).monospace()).clicked() {
                     jump = Some((b.start, b.len));
